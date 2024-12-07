@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Converter App</title>
+<style>
+  body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #f5f5f5;
+    margin: 0;
+    padding: 0;
+  }
+
+  header {
+    background: #fff;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  header h1 {
+    margin: 0;
+    font-size: 1.5em;
+    color: #333;
+  }
+
+  .container {
+    max-width: 600px;
+    background: #fff;
+    margin: 40px auto;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  }
+
+  .controls {
+    margin-bottom: 1.5em;
+  }
+
+  label {
+    display: inline-block;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    color: #333;
+  }
+
+  label[for="modeSelect"] {
+    margin-right: 10px;
+  }
+
+  #modeSelect, #inputText {
+    width: calc(100% - 10px);
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95em;
+    background: #fafafa;
+    margin-top: 0.3em;
+  }
+
+  #inputText {
+    margin-top: 0.5em;
+  }
+
+  .controls strong {
+    display: block;
+    margin-bottom: 0.5em;
+    font-size: 0.9em;
+    color: #333;
+  }
+
+  .controls input[type="checkbox"] {
+    margin-right: 5px;
+  }
+
+  button {
+    background: #333;
+    color: #fff;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.95em;
+    margin-right: 10px;
+  }
+
+  button:hover {
+    background: #555;
+  }
+
+  #output {
+    width: 100%;
+    height: 200px;
+    white-space: pre-wrap;
+    font-family: monospace;
+    background: #fafafa;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    font-size: 0.9em;
+    color: #333;
+    margin-top: 1em;
+  }
+
+  .button-group {
+    margin-bottom: 1em;
+  }
+
+  .final-summary {
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Converter App</h1>
+</header>
+
+<div class="container">
+  <div class="controls">
+    <label for="modeSelect">Conversion Mode:</label>
+    <select id="modeSelect">
+      <option value="letterToNumToRoman">Letters -> Numbers -> Roman Numerals</option>
+      <option value="numToLetterToRoman">Numbers -> Letters -> Roman Numerals</option>
+      <option value="romanToNumToLetter">Roman Numerals -> Numbers -> Letters</option>
+    </select>
+  </div>
+
+  <div class="controls">
+    <label for="inputText">Enter values (separated by spaces or commas):</label>
+    <input type="text" id="inputText" placeholder="e.g. XIV X III or 9 19 3 9 1" />
+  </div>
+
+  <div class="controls">
+    <strong>Letter Mapping Options (Cyclic):</strong>
+    <div>
+      <label><input type="checkbox" id="startFrom20"> Start from 20 (a=20 then wrap)</label><br>
+      <label><input type="checkbox" id="startFrom17"> Start from 17 (a=17 then wrap)</label><br>
+      <label><input type="checkbox" id="zeroBase"> Zeroth A = 0 (a=0 then wrap)</label><br>
+      <label><input type="checkbox" id="removeDR"> Remove D and R letters</label>
+    </div>
+  </div>
+
+  <div class="button-group">
+    <button id="convertBtn">Convert</button>
+    <button id="resetBtn">Reset Output</button>
+  </div>
+
+  <textarea id="output" readonly></textarea>
+</div>
+
+<script>
+// ----- Utility Functions -----
+
+function romanToInt(roman) {
+  const map = {I:1, V:5, X:10, L:50, C:100, D:500, M:1000};
+  let num = 0;
+  let prevVal = 0;
+  for (let i = roman.length - 1; i >= 0; i--) {
+    const val = map[roman[i].toUpperCase()];
+    if (!val) return null; // invalid character
+    if (val >= prevVal) {
+      num += val;
+    } else {
+      num -= val;
+    }
+    prevVal = val;
+  }
+  return num;
+}
+
+function intToRoman(num) {
+  if (num < 1 || num > 3999) return "Out of range";
+  const vals = [
+    {val:1000, sym:"M"}, {val:900, sym:"CM"}, {val:500, sym:"D"}, {val:400, sym:"CD"},
+    {val:100, sym:"C"}, {val:90, sym:"XC"}, {val:50, sym:"L"}, {val:40, sym:"XL"},
+    {val:10, sym:"X"}, {val:9, sym:"IX"}, {val:5, sym:"V"}, {val:4, sym:"IV"}, {val:1, sym:"I"}
+  ];
+  let res = "";
+  for (const {val, sym} of vals) {
+    while (num >= val) {
+      res += sym;
+      num -= val;
+    }
+  }
+  return res;
+}
+
+function getLetterMapping() {
+  const startFrom20 = document.getElementById('startFrom20').checked;
+  const startFrom17 = document.getElementById('startFrom17').checked;
+  const zeroBase = document.getElementById('zeroBase').checked;
+
+  let alphabet = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+  let startVal;
+  if (startFrom20) {
+    startVal = 20;
+  } else if (startFrom17) {
+    startVal = 17;
+  } else if (zeroBase) {
+    startVal = 0;
+  } else {
+    startVal = 1;
+  }
+
+  let letterToNum = {};
+  const isZeroBased = (startVal === 0);
+  const size = 26;
+
+  for (let i = 0; i < alphabet.length; i++) {
+    let val;
+    if (isZeroBased) {
+      // Zero-based: cycle through 0-25
+      val = (startVal + i) % size; 
+    } else {
+      // 1-based: cycle through 1-26
+      val = ((startVal - 1 + i) % size) + 1;
+    }
+    letterToNum[alphabet[i]] = val;
+  }
+
+  return letterToNum;
+}
+
+// Convert letters to number by summing their values
+function lettersToNumber(str, mapping) {
+  str = str.toLowerCase();
+  let sum = 0;
+  for (let ch of str) {
+    if (!mapping[ch]) {
+      return null;
+    }
+    sum += mapping[ch];
+  }
+  return sum;
+}
+
+// Convert number to letters: find which letter has this exact number
+function numberToLetters(num, mapping) {
+  for (const [letter, val] of Object.entries(mapping)) {
+    if (val === num) {
+      return letter;
+    }
+  }
+  return null;
+}
+
+function numbersToLettersSequence(token, mapping) {
+  const parts = token.split(/\s+/).filter(x => x !== '');
+  let letters = '';
+  for (let p of parts) {
+    let val = parseInt(p, 10);
+    if (isNaN(val) || val < 0 || val > 26) {
+      return {error: `Invalid number '${p}' in input. Must be between 0 and 26.`};
+    }
+    let letter = numberToLetters(val, mapping);
+    if (!letter) {
+      return {error: `No letter mapping found for the number ${val}`};
+    }
+    letters += letter;
+  }
+  return {letters: letters};
+}
+
+// ----- Main Conversion Logic -----
+
+function convertInput() {
+  const mode = document.getElementById('modeSelect').value;
+  const inputText = document.getElementById('inputText').value.trim();
+  const outputArea = document.getElementById('output');
+
+  if (!inputText) {
+    outputArea.value = "Please enter some input.";
+    return;
+  }
+
+  // Replace commas with spaces and then split on whitespace
+  const processedInput = inputText.replace(/,/g, ' ');
+  const tokens = processedInput.split(/\s+/).filter(x => x);
+
+  const mapping = getLetterMapping();
+
+  let results = [];
+  // Arrays to hold final combined results
+  let allLetters = [];
+  let allNumbers = [];
+  let allRomans = [];
+
+  for (let inp of tokens) {
+    let romanVal = "";
+    let numVal = null;
+    let letterVal = "";
+
+    if (mode === 'romanToNumToLetter') {
+      // Roman -> Number -> Letters
+      numVal = romanToInt(inp);
+      if (numVal === null) {
+        results.push(`Input: ${inp}\nError: Invalid Roman numeral`);
+        continue;
+      }
+      letterVal = numberToLetters(numVal, mapping);
+      if (letterVal === null) {
+        letterVal = "No direct letter match for this number in current mapping";
+      }
+      // romanVal is just the input in this mode
+      romanVal = inp;
+      results.push(`Roman: ${inp}\nNumber: ${numVal}\nLetters: ${letterVal}`);
+
+    } else if (mode === 'numToLetterToRoman') {
+      // Numbers -> Letters -> Roman
+      let parsed = numbersToLettersSequence(inp, mapping);
+      if (parsed.error) {
+        results.push(`Input: ${inp}\nError: ${parsed.error}`);
+        continue;
+      }
+      letterVal = parsed.letters;
+      let sum = lettersToNumber(letterVal, mapping);
+      if (sum === null) {
+        results.push(`Input: ${inp}\nError: Could not convert letters to number.`);
+        continue;
+      }
+      numVal = sum;
+      romanVal = intToRoman(numVal);
+      // Removed "Sum as Number" line as requested
+      results.push(`Numbers: ${inp}\nLetters: ${letterVal}\nRoman: ${romanVal}`);
+
+    } else if (mode === 'letterToNumToRoman') {
+      // Letters -> Numbers -> Roman
+      const sumVal = lettersToNumber(inp, mapping);
+      if (sumVal === null) {
+        results.push(`Input: ${inp}\nError: Invalid letter or no mapping`);
+        continue;
+      }
+      numVal = sumVal;
+      romanVal = intToRoman(numVal);
+      if (!romanVal) romanVal = "Out of range or invalid";
+      // letterVal is just the input in this mode
+      letterVal = inp;
+      results.push(`Letters: ${inp}\nNumber: ${numVal}\nRoman: ${romanVal}`);
+    }
+
+    // If no error occurred, append to final arrays
+    // Only append if letterVal, numVal, romanVal are valid (not error messages)
+    if (letterVal && !letterVal.startsWith("No direct letter") && !letterVal.startsWith("Error")) {
+      allLetters.push(letterVal);
+    } else {
+      // If letters invalid, skip this input in final summary
+      continue;
+    }
+
+    if (numVal !== null && typeof numVal === 'number') {
+      allNumbers.push(numVal.toString());
+    } else {
+      // If invalid, skip
+      allLetters.pop();
+      continue;
+    }
+
+    if (romanVal && !romanVal.startsWith("Out of range") && !romanVal.startsWith("Error")) {
+      allRomans.push(romanVal);
+    } else {
+      // If invalid Roman, skip this input
+      allLetters.pop();
+      allNumbers.pop();
+    }
+  }
+
+  // After processing all inputs, add the final combined lines
+  // Display the full number in letters, numbers, and roman numeral in order of input with no spaces
+  // in bold at the bottom.
+  if (allLetters.length > 0 && allNumbers.length > 0 && allRomans.length > 0) {
+    results.push(
+      `\n**${allLetters.join('')}**\n**${allNumbers.join('')}**\n**${allRomans.join('')}**`
+    );
+  }
+
+  outputArea.value = results.join('\n\n');
+}
+
+document.getElementById('convertBtn').addEventListener('click', convertInput);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.getElementById('output').value = "";
+  document.getElementById('inputText').value = "";
+});
+</script>
+
+</body>
+</html>
